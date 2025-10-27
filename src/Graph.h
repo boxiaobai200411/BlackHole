@@ -98,7 +98,8 @@ class Graph {
                                  std::vector<VertexID> &PartBlackHole);
     void getVerticesPartBlackHole();
     void baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount, ui k,
-                     ui *ind, ui *selectset, ui setSize);
+                     ui *ind, ui *selectset, ui setSize,
+                     BloomFilter &globalDistinct);
 
   public:
     void setThreads_count_(ui count) { threads_count_ = count; }

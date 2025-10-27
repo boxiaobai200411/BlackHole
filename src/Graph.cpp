@@ -437,7 +437,8 @@ void Graph::searchAnswer(ui level, ui start, const ui k, ui answerCount,
     }
 }
 
-uint64_t Graph::queryKBlackHoleParallel(const ui k, const std::string answer_path) {
+uint64_t Graph::queryKBlackHoleParallel(const ui k,
+                                        const std::string answer_path) {
 
     std::ofstream ofs(answer_path);
     uint64_t totalKSizeCount = 0;
@@ -600,7 +601,8 @@ uint64_t Graph::queryKBlackHole(const ui k, const std::string answer_path) {
 }
 
 void Graph::baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount,
-                        ui k, ui *ind, ui *selectset, ui setSize) {
+                        ui k, ui *ind, ui *selectset, ui setSize,
+                        BloomFilter &globalDistinct) {
 
     if (level == setSize)
         return;
@@ -630,8 +632,10 @@ void Graph::baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount,
             }
         }
         ui cou = connect_find.countRoots();
-        if (cou == 1 && valid == true) {
-            KsizeCount++;
+        bool alreadyExists =
+            globalDistinct.checkAndInsertArray(answer, answerCount);
+        if (cou == 1 && valid == true && !alreadyExists) {
+            // KsizeCount++;
         }
         return;
     }
@@ -640,11 +644,11 @@ void Graph::baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount,
     answer[answerCount] = v;
     ind[v] = answerCount;
     baselineDfs(level + 1, answer, answerCount + 1, KsizeCount, k, ind,
-                selectset, setSize);
+                selectset, setSize, globalDistinct);
     ind[v] = -1;
 
     baselineDfs(level + 1, answer, answerCount, KsizeCount, k, ind, selectset,
-                setSize);
+                setSize, globalDistinct);
 }
 uint64_t Graph::baseline(const ui k, string answer_path) {
     ui *answer = new ui[k];
@@ -656,9 +660,9 @@ uint64_t Graph::baseline(const ui k, string answer_path) {
     ui *vis = new ui[vertices_count_]();
     ui *selectSet = new ui[vertices_count_];
     ui setSize = 0;
-
+    BloomFilter globalDistinct(1000000, 0.01);
     for (ui i = 0; i < vertices_count_; i++) {
-
+        globalDistinct.clear();
         queue<pair<ui, ui>> que;
         nowTime++;
         que.push({i, 0});
@@ -691,7 +695,8 @@ uint64_t Graph::baseline(const ui k, string answer_path) {
                 }
             }
         }
-        baselineDfs(0, answer, 0, Kisze, k, ind, selectSet, setSize);
+        baselineDfs(0, answer, 0, Kisze, k, ind, selectSet, setSize,
+                    globalDistinct);
     }
 
     delete[] answer;
