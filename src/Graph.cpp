@@ -13,9 +13,13 @@
 #include <vector>
 #ifdef _OPENMP
 
+
 #endif
 using namespace std;
-ul countiCount = 0, useCount = 0;
+
+
+#define epsBuild 0
+
 
 using Clock = std::chrono::steady_clock;
 using Seconds = std::chrono::duration<double>;
@@ -51,10 +55,10 @@ void Graph::loadGraphFromFile(const std::string &file_path) {
             labels_[id] = label;
             offsets_[id + 1] = offsets_[id] + outDegree;
             reverse_offsets_[id + 1] = reverse_offsets_[id] + inDegree;
-            labels_vertices_[label] = id;
         } else if (type == 'e') { // Read edge.
             VertexID begin;
             VertexID end;
+            ui nowtime;
             infile >> begin >> end;
             ui offset = offsets_[begin] + neighbors_offset[begin];
             neighbors_[offset] = end;
@@ -70,18 +74,11 @@ void Graph::loadGraphFromFile(const std::string &file_path) {
 
     std::cout << "lord_over\n";
     ui count;
-
-    for (ui i = 0; i < vertices_count_; ++i) {
-        std::sort(neighbors_ + offsets_[i], neighbors_ + offsets_[i + 1]);
-    }
-    for (ui i = 0; i < vertices_count_; ++i) {
-        std::sort(reverse_neighbors_ + reverse_offsets_[i],
-                  reverse_neighbors_ + reverse_offsets_[i + 1]);
-    }
 }
 
 void Graph::buildSCCGraph() {
-    cout << "buildSCC\n";
+
+    cout << "buildSCCGraph\n";
     std::vector<ui> dfn(vertices_count_, 0), low(vertices_count_, 0), stk,
         dfs_stk;
     std::vector<bool> inStack(vertices_count_, false);
@@ -231,13 +228,13 @@ void Graph::buildSCCGraph() {
 
 void Graph::getTheMinBlackHoleBFS(int maxset) {
 
-    vector<vector<ui>> answer;
+    vector<pair<pair<ui, ui>, vector<ui>>> answer;
     vector<ui> vis(scc_count_);
     ui nowtime = 0;
-    for (ui i = 0; i < scc_count_; i++) { // 每个点
+    for (ui i = 0; i < scc_count_; i++) {
         if (i % (scc_count_ / 10) == 0) {
-            std::cout << "create minimum over:" << (double)i / scc_count_
-                      << "\n";
+            std::cout << "Find MinBlackHole over:"
+                      << (double)i / scc_count_ * 100.0 << "%\n";
         }
         queue<ui> que;
         vector<ui> nowans;
@@ -272,41 +269,72 @@ void Graph::getTheMinBlackHoleBFS(int maxset) {
             if (nowans.size() > maxset || flag > maxset)
                 break;
         }
-
         if (nowans.size() > maxset || flag > maxset) {
             continue;
         }
 
+
+        ul minIndeg = 0x3f3f3f3f;
+        for (auto ver : nowans) {
+            ui count;
+            ul Indeg = 0;
+            const ui *neighborsVer = getVertexReverseNeighbors(ver, count);
+            for (int j = 0; j < count; j++) {
+
+                if (vis[scc_id_[neighborsVer[j]]] == nowtime)
+                    continue;
+                Indeg++;
+            }
+            minIndeg = min(minIndeg, Indeg);
+            if (minIndeg <= 0) {
+                break;
+            }
+        }
+#if epsBuild == 1
+        if (minIndeg == 0)
+            continue;
+#endif
+        
+
         sort(nowans.begin(), nowans.end());
-        answer.push_back(nowans);
+
+        answer.push_back(
+            {{nowans.size(), minIndeg},
+             nowans}); // first.first=size,first.second=Indeg,second=vec
     }
 
     std::sort(answer.begin(), answer.end(),
-              [](const std::vector<ui> &A, const std::vector<ui> &B) {
-                  return A.size() > B.size();
+              [](const pair<pair<ui, ui>, vector<ui>> &A,
+                 const pair<pair<ui, ui>, vector<ui>> &B) {
+                  if (A.first.first != B.first.first)
+                      return A.first.first > B.first.first;
+                  return A.first.second < B.first.second;
               });
     scc_count_ = answer.size();
 
     partBlackHole_offsets_ = new ul[scc_count_ + 1];
+    partBlackHole_minIndeg_ = new ui[scc_count_ + 1];
     partBlackHole_offsets_[0] = 0;
 
     for (ui i = 1; i <= scc_count_; i++) {
         partBlackHole_offsets_[i] =
-            partBlackHole_offsets_[i - 1] + answer[i - 1].size();
+            partBlackHole_offsets_[i - 1] + answer[i - 1].first.first;
+        partBlackHole_minIndeg_[i - 1] = answer[i - 1].first.second;
     }
+
     partBlackHole_neighbors_ = new VertexID[partBlackHole_offsets_[scc_count_]];
 
     for (ui i = 0; i < scc_count_; i++) {
-        ui count = answer[i].size();
+        ui count = answer[i].first.first;
         ul start = partBlackHole_offsets_[i];
         for (ui j = 0; j < count; j++) {
             partBlackHole_neighbors_[partBlackHole_offsets_[i] + j] =
-                answer[i][j];
+                answer[i].second[j];
         }
     }
 
     cout << partBlackHole_offsets_[scc_count_] << " size\n";
-    cout << "getTheMinBlackHole_over\n";
+    cout << "Find MinBlackHole_over\n";
 }
 
 void Graph::connectSCC(int maxset) {
@@ -322,17 +350,21 @@ void Graph::connectSCC(int maxset) {
 
     for (ui i = 0; i < scc_count_; i++) {
         if (i % (scc_count_ / 10) == 0) {
-            std::cout << "connect SCC over:" << (double)i / scc_count_ << "\n";
+            std::cout << "connect SCC over:" << (double)i / scc_count_ * 100.0
+                      << "%\n";
         }
-        if (scc_neighbors[i].size() > maxset || scc_neighbors[i].size() == 0)
+        if (scc_neighbors[i].size() > maxset || scc_neighbors[i].size() == 0) {
+            cout << "sbsbsbsbsb\n";
             continue;
+        }
+
         if (scc_neighbors[i].size() == 1)
             break;
 
         for (ui j = i + 1; j < scc_count_; j++) {
 
             if (scc_neighbors[j].size() == 1)
-                continue;
+                break;
 
             ui flag = checkRelation(scc_neighbors[i], scc_neighbors[j]);
             if (flag == 1) {
@@ -361,28 +393,71 @@ void Graph::connectSCC(int maxset) {
         }
     }
 
-    cout << "edge:" << cu << "\n";
-    cout << "connectSCC_over\n";
+    cout << "Connect BlackHole edge:" << cu << "\n";
 }
+
 void Graph::buildIndex(int maxset) {
     buildSCCGraph();
     getTheMinBlackHoleBFS(maxset);
     connectSCC(maxset);
 }
+#ifdef COUTTIME
+double TimeSelectAnswer = 0, combinset = 0, combinnei = 0, allreadyTime = 0,
+       createTime = 0;
+#endif
 
 void Graph::searchAnswer(ui level, ui start, const ui k, ui answerCount,
                          VertexID *answer_, bool *visPoint, ui NeighborCount,
                          VertexID *NeighborSet, bool *VisNeighbor,
-                         ui upPointCount, VertexID *upPoint, std::ofstream &ofs,
-                         uint64_t &kSizeCount, BloomFilter &localDistinct) {
+                         ui upPointCount, VertexID *upPoint, double y,
+                         int eachin, std::ofstream &ofs, uint64_t &kSizeCount,
+                         BloomFilter &localDistinct) {
 
     if (answerCount == k) {
+#ifdef COUTTIME
+        auto tans1ex = std::chrono::steady_clock::now();
+#endif
+        bool alreadyExists = localDistinct.checkAndInsertArray(
+            answer_, answerCount); // 看遇到过吗
+#ifdef COUTTIME
+        auto tans2ex = std::chrono::steady_clock::now();
+        allreadyTime +=
+            std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
 
-        bool alreadyExists =
-            localDistinct.checkAndInsertArray(answer_, answerCount);
         if (!alreadyExists) {
-            kSizeCount++;
+#ifdef COUTTIME
+            auto tans1 = std::chrono::steady_clock::now();
+#endif
+
+            ui outCount = 0;
+            bool eachin_flag = 1;
+            for (ui i = 0; i < answerCount; i++) {
+                ui count;
+                const ui *neighbor =
+                    getVertexReverseNeighbors(answer_[i], count);
+                ui nowCount = 0;
+                for (ui j = 0; j < count; j++) {
+                    VertexID v = neighbor[j];
+                    if (visPoint[v])
+                        continue;
+                    nowCount++;
+                    outCount++;
+                }
+                if (nowCount < eachin)
+                    eachin_flag = 0;
+            }
+            double nowy = outCount / (double)k;
+            if (nowy >= y && eachin_flag == 1) {
+                kSizeCount++;
+            }
+#ifdef COUTTIME
+            auto tans2 = std::chrono::steady_clock::now();
+            TimeSelectAnswer +=
+                std::chrono::duration<double>(tans2 - tans1).count();
+#endif
         }
+
         // for(ui i=0;i<answerCount;i++){
         //     ofs<<answer_[i]<<" ";
         // }
@@ -397,6 +472,9 @@ void Graph::searchAnswer(ui level, ui start, const ui k, ui answerCount,
         ui addPointNeighbor = 0;
         ui count;
         VertexID u = NeighborSet[i];
+#ifdef COUTTIME
+        auto tans1 = std::chrono::steady_clock::now();
+#endif
 
         const ui *neighbor = getByPartBHVerticesNeighbors(u, count);
         for (ui j = 0; j < count; j++) {
@@ -404,45 +482,100 @@ void Graph::searchAnswer(ui level, ui start, const ui k, ui answerCount,
             if (visPoint[v])
                 continue;
             visPoint[v] = true;
-
-            answer_[answerCount + addPoint] = v;
+            answer_[answerCount + addPoint] = v; // 当前点放进去
             addPoint++;
         }
+
+        bool flagInDegree = 1;
+        for (ui j = 0; j < addPoint; j++) {
+            ui nowVertexinCount = 0;
+
+            const ui *neighbornow =
+                getVertexReverseNeighbors(answer_[answerCount + j],
+                                          count); // 这个点的反向邻居
+
+            for (ui inNei = 0; inNei < count; inNei++) {
+                if (visPoint[neighbornow[inNei]])
+                    continue;
+                nowVertexinCount++;
+            }
+
+            if (nowVertexinCount < eachin) {
+                flagInDegree = 0;
+                break;
+            }
+        }
+
+        if (flagInDegree == 0) {
+            // cout << "NO\n";
+            for (ui j = 0; j < addPoint; j++) {
+                visPoint[answer_[answerCount + j]] = false;
+            }
+            // cout << "YES\n";
+            continue;
+        }
+#ifdef COUTTIME
+        auto tans2 = std::chrono::steady_clock::now();
+        combinset += std::chrono::duration<double>(tans2 - tans1).count();
+        auto tans11 = std::chrono::steady_clock::now();
+#endif
 
         neighbor = getPartBlackHoleConnectNeighbors(u, count);
 
         for (ui j = 0; j < count; j++) {
             VertexID v = neighbor[j];
-            if (VisNeighbor[v] || v <= start)
+            if (VisNeighbor[v] || v <= start )
                 continue;
+
+#if epsBuild
+            if(partBlackHole_minIndeg_[v] < eachin) continue;
+#endif
+
             VisNeighbor[v] = true;
             NeighborSet[NeighborCount + addPointNeighbor] = v;
             addPointNeighbor++;
         }
+#ifdef COUTTIME
+        auto tans22 = std::chrono::steady_clock::now();
+        combinnei += std::chrono::duration<double>(tans22 - tans11).count();
+#endif
+
         upPoint[upPointCount] = u;
 
         if (addPoint != 0)
             searchAnswer(i + 1, start, k, answerCount + addPoint, answer_,
                          visPoint, NeighborCount + addPointNeighbor,
-                         NeighborSet, VisNeighbor, upPointCount + 1, upPoint,
-                         ofs, kSizeCount, localDistinct);
+                         NeighborSet, VisNeighbor, upPointCount + 1, upPoint, y,
+                         eachin, ofs, kSizeCount, localDistinct);
+
+#ifdef COUTTIME
+        tans1 = std::chrono::steady_clock::now();
+#endif
 
         for (ui j = 0; j < addPoint; j++) {
             visPoint[answer_[answerCount + j]] = false;
         }
+#ifdef COUTTIME
+        tans2 = std::chrono::steady_clock::now();
+        combinset += std::chrono::duration<double>(tans2 - tans1).count();
+        tans11 = std::chrono::steady_clock::now();
+#endif
 
         for (ui j = 0; j < addPointNeighbor; j++) {
             VisNeighbor[NeighborSet[NeighborCount + j]] = false;
         }
+
+#ifdef COUTTIME
+        tans22 = std::chrono::steady_clock::now();
+        combinnei += std::chrono::duration<double>(tans2 - tans1).count();
+#endif
     }
 }
-
-uint64_t Graph::queryKBlackHoleParallel(const ui k,
+uint64_t Graph::queryKBlackHoleParallel(const ui k, double y, int eachin,
                                         const std::string answer_path) {
 
     std::ofstream ofs(answer_path);
     uint64_t totalKSizeCount = 0;
-    countiCount = 0, useCount = 0;
 
     VertexID **localAnswer = new VertexID *[threads_count_];
     VertexID **localNeighborSet = new VertexID *[threads_count_];
@@ -497,16 +630,13 @@ uint64_t Graph::queryKBlackHoleParallel(const ui k,
             localVisNeighbor[thread_id][neighborsN[j]] = true;
         }
 
-        if (answer_cnt_ != k) {
+        if (answer_cnt_ <= k) {
             searchAnswer(0, i, k, answer_cnt_, localAnswer[thread_id],
                          localVisPoint[thread_id], NeighborCount,
                          localNeighborSet[thread_id],
                          localVisNeighbor[thread_id], upPointCount,
-                         localUpPoint[thread_id], ofs, localKSizeCount,
-                         localDistinct);
-
-        } else {
-            localKSizeCount++;
+                         localUpPoint[thread_id], y, eachin, ofs,
+                         localKSizeCount, localDistinct);
         }
         for (ui j = 0; j < count; j++) {
             localVisPoint[thread_id][neighbors[j]] = false;
@@ -518,13 +648,29 @@ uint64_t Graph::queryKBlackHoleParallel(const ui k,
         }
         totalKSizeCount += localKSizeCount;
     }
+
     ofs.close();
+    for (ui i = 0; i < threads_count_; i++) {
+        delete[] localAnswer[i];
+        delete[] localNeighborSet[i];
+        delete[] localVisPoint[i];
+        delete[] localVisNeighbor[i];
+        delete[] localUpPoint[i];
+    }
+    delete[] localAnswer;
+    delete[] localNeighborSet;
+    delete[] localVisPoint;
+    delete[] localVisNeighbor;
+    delete[] localUpPoint;
     return totalKSizeCount;
 }
 
-uint64_t Graph::queryKBlackHole(const ui k, const std::string answer_path) {
+uint64_t Graph::queryKBlackHole(const ui k, double y, int eachin,
+                                const std::string answer_path) {
+#ifdef COUTTIME
+    combinnei = combinset = TimeSelectAnswer = allreadyTime = 0;
+#endif
 
-    VertexID *extendFather = new VertexID[scc_count_];
     VertexID *answer_ = new VertexID[vertices_count_];
     VertexID *NeighborSet = new VertexID[scc_count_];
     bool *visPoint = new bool[vertices_count_]();
@@ -534,22 +680,34 @@ uint64_t Graph::queryKBlackHole(const ui k, const std::string answer_path) {
     ui upPointCount = 0;
     ui answer_cnt_ = 0;
     ui NeighborCount = 0;
+    auto tansall1 = std::chrono::steady_clock::now();
+
+#ifdef COUTTIME
+    auto tans1ex = std::chrono::steady_clock::now();
+#endif
 
     BloomFilter globalDistinct(1000000, 0.01);
 
+#ifdef COUTTIME
+    auto tans2ex = std::chrono::steady_clock::now();
+    allreadyTime += std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
+
     std::ofstream ofs(answer_path);
+    globalDistinct.clear();
     uint64_t kSizeCount = 0;
-    countiCount = 0, useCount = 0;
     for (ui i = 0; i < scc_count_; i++) {
         if (getByPartBHVerticesDegree(i) == 1 ||
             getByPartBHVerticesDegree(i) > k)
             continue;
-        globalDistinct.clear();
         upPoint[upPointCount++] = i;
         VisNeighbor[i] = true;
 
+#ifdef COUTTIME
+        tans1ex = std::chrono::steady_clock::now();
+#endif
+
         ui count = 0;
-        ui countNei = 0;
 
         const ui *neighbors = getByPartBHVerticesNeighbors(i, count);
         for (ui j = 0; j < count; j++) {
@@ -557,50 +715,320 @@ uint64_t Graph::queryKBlackHole(const ui k, const std::string answer_path) {
             visPoint[neighbors[j]] = true;
         }
 
+#ifdef COUTTIME
+        tans2ex = std::chrono::steady_clock::now();
+        combinset += std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
+        ui countNei = 0;
         const ui *neighborsN = getPartBlackHoleConnectNeighbors(i, countNei);
+
+#ifdef COUTTIME
+        tans1ex = std::chrono::steady_clock::now();
+#endif
 
         for (ui j = 0; j < countNei; j++) {
             if (neighborsN[j] <= i)
                 continue;
-            extendFather[NeighborCount] = i;
             NeighborSet[NeighborCount++] = neighborsN[j];
-
             VisNeighbor[neighborsN[j]] = true;
         }
+#ifdef COUTTIME
+        tans2ex = std::chrono::steady_clock::now();
+        combinnei += std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
 
-        if (answer_cnt_ != k) {
-            searchAnswer(0, i, k, answer_cnt_, answer_, visPoint, NeighborCount,
-                         NeighborSet, VisNeighbor, upPointCount, upPoint, ofs,
-                         kSizeCount, globalDistinct);
-        } else {
-            kSizeCount++;
-        }
+        searchAnswer(0, i, k, answer_cnt_, answer_, visPoint, NeighborCount,
+                     NeighborSet, VisNeighbor, upPointCount, upPoint, y, eachin,
+                     ofs, kSizeCount, globalDistinct);
 
         VisNeighbor[i] = false;
         upPointCount = 0;
+#ifdef COUTTIME
+        tans1ex = std::chrono::steady_clock::now();
+#endif
+
         for (ui j = 0; j < count; j++) {
             visPoint[neighbors[j]] = false;
         }
+#ifdef COUTTIME
+        tans2ex = std::chrono::steady_clock::now();
+        combinset += std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
 
         answer_cnt_ = 0;
         NeighborCount = 0;
+#ifdef COUTTIME
+        tans1ex = std::chrono::steady_clock::now();
+#endif
 
         for (ui j = 0; j < countNei; j++) {
             VisNeighbor[neighborsN[j]] = false;
         }
+#ifdef COUTTIME
+        tans2ex = std::chrono::steady_clock::now();
+        combinnei += std::chrono::duration<double>(tans2ex - tans1ex).count();
+#endif
     }
     ofs.close();
-
+    auto tansall2 = std::chrono::steady_clock::now();
+    double TimeAll = std::chrono::duration<double>(tansall2 - tansall1).count();
     delete[] answer_;
     delete[] NeighborSet;
     delete[] visPoint;
     delete[] VisNeighbor;
     delete[] upPoint;
+#ifdef COUTTIME
+    cout << "nei:" << combinnei << "s   set:" << combinset
+         << "s, ansTime:" << TimeSelectAnswer << "s  exitTime:" << allreadyTime
+         << "s TimeALL:" << TimeAll << "\n";
+#endif
 
     return kSizeCount;
 }
 
-void Graph::baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount,
+void Graph::saveIndex(std::string dataid, int max) {
+    std::string filename =
+        "../index/" + dataid + "_" + std::to_string(max) + "_index.bin";
+    std::ofstream ofs(filename, std::ios::binary);
+    if (!ofs.is_open()) {
+        std::cerr << "Cannot open file for saving index: " << filename << "\n";
+        return;
+    }
+
+    // 基本信息
+    ofs.write((char *)&vertices_count_, sizeof(ui));
+    ofs.write((char *)&edges_count_, sizeof(ui));
+    ofs.write((char *)&scc_count_, sizeof(ui));
+
+    // 原图正向边
+    ofs.write((char *)offsets_, sizeof(ul) * (vertices_count_ + 1));
+    ofs.write((char *)neighbors_, sizeof(VertexID) * edges_count_);
+
+    // 原图反向边
+    ofs.write((char *)reverse_offsets_, sizeof(ul) * (vertices_count_ + 1));
+    ofs.write((char *)reverse_neighbors_, sizeof(VertexID) * edges_count_);
+
+    // labels
+    ofs.write((char *)labels_, sizeof(LabelID) * vertices_count_);
+
+    // scc图
+    ofs.write((char *)scc_id_, sizeof(ui) * vertices_count_);
+
+    ul scc_edge_total = scc_offsets_[scc_count_];
+    ofs.write((char *)scc_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ofs.write((char *)scc_neighbors_, sizeof(VertexID) * scc_edge_total);
+
+    ul scc_rev_edge_total = scc_rev_offsets_[scc_count_];
+    ofs.write((char *)scc_rev_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ofs.write((char *)scc_rev_neighbors_,
+              sizeof(VertexID) * scc_rev_edge_total);
+
+    ul scc_v_total = scc_vertices_offsets_[scc_count_];
+    ofs.write((char *)scc_vertices_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ofs.write((char *)scc_vertices_, sizeof(VertexID) * scc_v_total);
+
+    // partBlackHole（最小黑洞点集）
+    ul bh_total = partBlackHole_offsets_[scc_count_];
+    ofs.write((char *)partBlackHole_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ofs.write((char *)partBlackHole_minIndeg_, sizeof(ui) * scc_count_);
+    ofs.write((char *)partBlackHole_neighbors_, sizeof(VertexID) * bh_total);
+
+    // partBlackHoleConnect（黑洞间连接）
+    ul conn_total = partBlackHoleConnect_offsets_[scc_count_];
+    ofs.write((char *)partBlackHoleConnect_offsets_,
+              sizeof(ul) * (scc_count_ + 1));
+    ofs.write((char *)partBlackHoleConnect_neighbors_,
+              sizeof(VertexID) * conn_total);
+
+    ofs.close();
+    std::cout << "saveIndex done: " << filename << "\n";
+}
+
+bool Graph::loadIndex(std::string dataid, int max) {
+    std::string filename =
+        "../index/" + dataid + "_" + std::to_string(max) + "_index.bin";
+    std::ifstream ifs(filename, std::ios::binary);
+    if (!ifs.is_open()) {
+        std::cerr << "Cannot open index file: " << filename << "\n";
+        return false;
+    }
+
+    ifs.read((char *)&vertices_count_, sizeof(ui));
+    ifs.read((char *)&edges_count_, sizeof(ui));
+    ifs.read((char *)&scc_count_, sizeof(ui));
+
+    // 原图正向边
+    offsets_ = new ul[vertices_count_ + 1];
+    neighbors_ = new VertexID[edges_count_];
+    ifs.read((char *)offsets_, sizeof(ul) * (vertices_count_ + 1));
+    ifs.read((char *)neighbors_, sizeof(VertexID) * edges_count_);
+
+    // 原图反向边
+    reverse_offsets_ = new ul[vertices_count_ + 1];
+    reverse_neighbors_ = new VertexID[edges_count_];
+    ifs.read((char *)reverse_offsets_, sizeof(ul) * (vertices_count_ + 1));
+    ifs.read((char *)reverse_neighbors_, sizeof(VertexID) * edges_count_);
+
+    // labels
+    labels_ = new LabelID[vertices_count_];
+    ifs.read((char *)labels_, sizeof(LabelID) * vertices_count_);
+
+    // scc图
+    scc_id_ = new ui[vertices_count_];
+    ifs.read((char *)scc_id_, sizeof(ui) * vertices_count_);
+
+    scc_offsets_ = new ul[scc_count_ + 1];
+    ifs.read((char *)scc_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ul scc_edge_total = scc_offsets_[scc_count_];
+    scc_neighbors_ = new VertexID[scc_edge_total];
+    ifs.read((char *)scc_neighbors_, sizeof(VertexID) * scc_edge_total);
+
+    scc_rev_offsets_ = new ul[scc_count_ + 1];
+    ifs.read((char *)scc_rev_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ul scc_rev_edge_total = scc_rev_offsets_[scc_count_];
+    scc_rev_neighbors_ = new VertexID[scc_rev_edge_total];
+    ifs.read((char *)scc_rev_neighbors_, sizeof(VertexID) * scc_rev_edge_total);
+
+    scc_vertices_offsets_ = new ul[scc_count_ + 1];
+    ifs.read((char *)scc_vertices_offsets_, sizeof(ul) * (scc_count_ + 1));
+    ul scc_v_total = scc_vertices_offsets_[scc_count_];
+    scc_vertices_ = new VertexID[scc_v_total];
+    ifs.read((char *)scc_vertices_, sizeof(VertexID) * scc_v_total);
+
+    // partBlackHole（最小黑洞点集）
+    partBlackHole_offsets_ = new ul[scc_count_ + 1];
+    ifs.read((char *)partBlackHole_offsets_, sizeof(ul) * (scc_count_ + 1));
+    partBlackHole_minIndeg_ = new ui[scc_count_];
+    ifs.read((char *)partBlackHole_minIndeg_, sizeof(ui) * scc_count_);
+    ul bh_total = partBlackHole_offsets_[scc_count_];
+    partBlackHole_neighbors_ = new VertexID[bh_total];
+    ifs.read((char *)partBlackHole_neighbors_, sizeof(VertexID) * bh_total);
+
+    // partBlackHoleConnect（黑洞间连接）
+    partBlackHoleConnect_offsets_ = new ul[scc_count_ + 1];
+    ifs.read((char *)partBlackHoleConnect_offsets_,
+             sizeof(ul) * (scc_count_ + 1));
+    ul conn_total = partBlackHoleConnect_offsets_[scc_count_];
+    partBlackHoleConnect_neighbors_ = new VertexID[conn_total];
+    ifs.read((char *)partBlackHoleConnect_neighbors_,
+             sizeof(VertexID) * conn_total);
+
+    ifs.close();
+    std::cout << "loadIndex done: " << filename << "\n";
+    return true;
+}
+
+
+
+
+void Graph::baselineDfs(ui level, const ui k, double y, int eachin, int root,
+                        VertexID *NeighborSet, ui neighborCount, int *visPoint,
+                        int *visAnswer, VertexID *answer_, ui answerCount,
+                        uint64_t &kSizeCount, std::string answer_path) {
+    if (answerCount == k) {
+        ui sumIndeg = 0;
+        ui minIndeg = 0x3f3f3f3f;
+        for (int i = 0; i < answerCount; i++) {
+            ui count;
+            const ui *neighbor = getVertexNeighbors(answer_[i], count);
+            for (int j = 0; j < count; j++) {
+                ui nowPoint = neighbor[j];
+                if (visAnswer[nowPoint] == root)
+                    continue;
+                return; // 保证每个子图没有出边。
+            }
+
+            neighbor = getVertexReverseNeighbors(answer_[i], count);
+            ui inDeg = 0;
+            for (int j = 0; j < count; j++) {
+                ui nowPoint = neighbor[j];
+                if (visAnswer[nowPoint] == root) // 查看有多少入边。
+                    continue;
+                inDeg++;
+            }
+            minIndeg = min(minIndeg, inDeg);
+            sumIndeg += inDeg;
+        }
+        if (minIndeg < eachin)
+            return;                          // 满足每个点至少有eachin个入边。
+        double yinli = (double)sumIndeg / k; // 求平均每个点有多少入边
+        if (yinli < y)
+            return;
+        kSizeCount++;
+        return;
+    }
+    for (ui i = level; i < neighborCount; i++) {
+        ui nowPoint = NeighborSet[i];
+        answer_[answerCount] = nowPoint;
+        visAnswer[nowPoint] = root;
+        ui count;
+        const ui *neighbor = getVertexNeighbors(nowPoint, count);
+        ui addNeighbor = 0;
+        for (ui j = 0; j < count; j++) {
+            ui u = neighbor[j];
+            if (visPoint[u] == root || u <= root)
+                continue;
+            visPoint[u] = root;
+            NeighborSet[neighborCount + addNeighbor] = u;
+            addNeighbor++;
+        }
+        neighbor = getVertexReverseNeighbors(nowPoint, count);
+        for (ui j = 0; j < count; j++) {
+            ui u = neighbor[j];
+            if (visPoint[u] == root || u <= root)
+                continue;
+            visPoint[u] = root;
+            NeighborSet[neighborCount + addNeighbor] = u;
+            addNeighbor++;
+        }
+        baselineDfs(i + 1, k, y, eachin, root, NeighborSet,
+                    neighborCount + addNeighbor, visPoint, visAnswer, answer_,
+                    answerCount + 1, kSizeCount, answer_path);
+
+        for (ui j = 0; j < addNeighbor; j++) {
+            visPoint[NeighborSet[neighborCount + j]] = -1;
+        }
+        visAnswer[nowPoint] = -1;
+    }
+}
+
+
+uint64_t Graph::baseline(const ui k, double y, int eachin,
+                         const std::string answer_path) {
+    VertexID *answer_ = new VertexID[vertices_count_];
+    VertexID *NeighborSet = new VertexID[vertices_count_];
+    int *visPoint = new int[vertices_count_];
+    int *visAnswer = new int[vertices_count_];
+
+    for (ui i = 0; i < vertices_count_; i++) {
+        visPoint[i] = -1;
+        visAnswer[i] = -1;
+    }
+    uint64_t kSizeCount = 0;
+    for (ui i = 0; i < vertices_count_; i++) {
+        ui neighborCount = 0;
+        ui count = 0;
+        const ui *neighbor = getVertexNeighbors(i, count);
+        visPoint[i] = i;
+        visAnswer[i] = i;
+        for (int j = 0; j < count; j++) {
+            if (neighbor[j] > i)
+                NeighborSet[neighborCount++] = neighbor[j];
+        }
+        neighbor = getVertexReverseNeighbors(i, count);
+        for (int j = 0; j < count; j++) {
+            if (neighbor[j] > i)
+                NeighborSet[neighborCount++] = neighbor[j];
+        }
+        answer_[0] = i;
+        baselineDfs(0, k, y, eachin, i, NeighborSet, neighborCount, visPoint,
+                    visAnswer, answer_, 1, kSizeCount, answer_path);
+    }
+    return kSizeCount;
+}
+
+
+void Graph::baselineDfs2(ui level, ui *answer, ui answerCount, ul &KsizeCount,
                         ui k, ui *ind, ui *selectset, ui setSize,
                         BloomFilter &globalDistinct) {
 
@@ -643,14 +1071,14 @@ void Graph::baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount,
     VertexID v = selectset[level];
     answer[answerCount] = v;
     ind[v] = answerCount;
-    baselineDfs(level + 1, answer, answerCount + 1, KsizeCount, k, ind,
+    baselineDfs2(level + 1, answer, answerCount + 1, KsizeCount, k, ind,
                 selectset, setSize, globalDistinct);
     ind[v] = -1;
 
-    baselineDfs(level + 1, answer, answerCount, KsizeCount, k, ind, selectset,
+    baselineDfs2(level + 1, answer, answerCount, KsizeCount, k, ind, selectset,
                 setSize, globalDistinct);
 }
-uint64_t Graph::baseline(const ui k, string answer_path) {
+uint64_t Graph::baseline2(const ui k, string answer_path) {
     ui *answer = new ui[k];
     ui *ind = new ui[vertices_count_];
     for (ui i = 0; i < vertices_count_; i++)
@@ -695,255 +1123,11 @@ uint64_t Graph::baseline(const ui k, string answer_path) {
                 }
             }
         }
-        baselineDfs(0, answer, 0, Kisze, k, ind, selectSet, setSize,
+        baselineDfs2(0, answer, 0, Kisze, k, ind, selectSet, setSize,
                     globalDistinct);
     }
 
     delete[] answer;
     delete[] ind;
     return Kisze;
-}
-
-void Graph::saveIndex(std::string dataid) {
-    std::string filename = "../index/" + dataid + "_index";
-    std::ofstream out(filename, std::ios::binary);
-
-    if (!out.is_open()) {
-        std::cout << "Cannot create index file: " << filename << std::endl;
-        return;
-    }
-
-    out.write(reinterpret_cast<const char *>(&vertices_count_),
-              sizeof(vertices_count_));
-    out.write(reinterpret_cast<const char *>(&edges_count_),
-              sizeof(edges_count_));
-
-    if (labels_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(labels_),
-                  sizeof(LabelID) * vertices_count_);
-    }
-
-    if (offsets_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(offsets_),
-                  sizeof(ul) * (vertices_count_ + 1));
-    }
-    if (neighbors_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(neighbors_),
-                  sizeof(VertexID) * edges_count_);
-    }
-
-    if (reverse_offsets_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(reverse_offsets_),
-                  sizeof(ul) * (vertices_count_ + 1));
-    }
-    if (reverse_neighbors_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(reverse_neighbors_),
-                  sizeof(VertexID) * edges_count_);
-    }
-
-    out.write(reinterpret_cast<const char *>(&scc_count_), sizeof(scc_count_));
-
-    if (scc_count_ > 0) {
-        if (partBlackHole_offsets_ != nullptr) {
-            out.write(reinterpret_cast<const char *>(partBlackHole_offsets_),
-                      sizeof(ul) * (scc_count_ + 1));
-            out.write(reinterpret_cast<const char *>(partBlackHole_neighbors_),
-                      sizeof(VertexID) * partBlackHole_offsets_[scc_count_]);
-        }
-
-        if (partBlackHoleConnect_offsets_ != nullptr) {
-            out.write(
-                reinterpret_cast<const char *>(partBlackHoleConnect_offsets_),
-                sizeof(ul) * (scc_count_ + 1));
-            out.write(
-                reinterpret_cast<const char *>(partBlackHoleConnect_neighbors_),
-                sizeof(VertexID) * partBlackHoleConnect_offsets_[scc_count_]);
-        }
-    }
-
-    size_t labels_vertices_size = labels_vertices_.size();
-    out.write(reinterpret_cast<const char *>(&labels_vertices_size),
-              sizeof(labels_vertices_size));
-    for (const auto &pair : labels_vertices_) {
-        LabelID label = pair.first;
-        ui vertex_id = pair.second;
-        out.write(reinterpret_cast<const char *>(&label), sizeof(label));
-        out.write(reinterpret_cast<const char *>(&vertex_id),
-                  sizeof(vertex_id));
-    }
-
-    if (scc_offsets_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(scc_offsets_),
-                  sizeof(ul) * (scc_count_ + 1));
-        out.write(reinterpret_cast<const char *>(scc_neighbors_),
-                  sizeof(VertexID) * scc_offsets_[scc_count_]);
-    }
-
-    if (scc_id_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(scc_id_),
-                  sizeof(ui) * vertices_count_);
-    }
-
-    if (scc_vertices_offsets_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(scc_vertices_offsets_),
-                  sizeof(ul) * (scc_count_ + 1));
-        out.write(reinterpret_cast<const char *>(scc_vertices_),
-                  sizeof(VertexID) * scc_vertices_offsets_[scc_count_]);
-    }
-
-    if (scc_rev_offsets_ != nullptr) {
-        out.write(reinterpret_cast<const char *>(scc_rev_offsets_),
-                  sizeof(ul) * (scc_count_ + 1));
-        out.write(reinterpret_cast<const char *>(scc_rev_neighbors_),
-                  sizeof(VertexID) * scc_rev_offsets_[scc_count_]);
-    }
-
-    out.close();
-    std::cout << "index load: " << filename << std::endl;
-}
-
-bool Graph::loadIndex(std::string dataid) {
-    std::string filename = "../index/" + dataid + "_index";
-    std::ifstream in(filename, std::ios::binary);
-
-    if (!in.is_open()) {
-        std::cout << "NO index file: " << filename << std::endl;
-        return 0;
-    }
-
-    if (!in.read(reinterpret_cast<char *>(&vertices_count_),
-                 sizeof(vertices_count_)) ||
-        !in.read(reinterpret_cast<char *>(&edges_count_),
-                 sizeof(edges_count_))) {
-        cout << "read index error " << endl;
-        in.close();
-        exit(0);
-    }
-
-    if (vertices_count_ > 0) {
-        labels_ = new LabelID[vertices_count_];
-        in.read(reinterpret_cast<char *>(labels_),
-                sizeof(LabelID) * vertices_count_);
-    }
-
-    if (vertices_count_ > 0) {
-        offsets_ = new ul[vertices_count_ + 1];
-        in.read(reinterpret_cast<char *>(offsets_),
-                sizeof(ul) * (vertices_count_ + 1));
-    }
-
-    if (edges_count_ > 0) {
-        neighbors_ = new VertexID[edges_count_];
-        in.read(reinterpret_cast<char *>(neighbors_),
-                sizeof(VertexID) * edges_count_);
-    }
-
-    if (vertices_count_ > 0) {
-        reverse_offsets_ = new ul[vertices_count_ + 1];
-        in.read(reinterpret_cast<char *>(reverse_offsets_),
-                sizeof(ul) * (vertices_count_ + 1));
-    }
-
-    if (edges_count_ > 0) {
-        reverse_neighbors_ = new VertexID[edges_count_];
-        in.read(reinterpret_cast<char *>(reverse_neighbors_),
-                sizeof(VertexID) * edges_count_);
-    }
-
-    if (!in.read(reinterpret_cast<char *>(&scc_count_), sizeof(scc_count_))) {
-        cout << "read index error " << endl;
-        in.close();
-        exit(0);
-    }
-
-    // 读取黑洞相关结构
-    if (scc_count_ > 0) {
-        partBlackHole_offsets_ = new ul[scc_count_ + 1];
-        if (!in.read(reinterpret_cast<char *>(partBlackHole_offsets_),
-                     sizeof(ul) * (scc_count_ + 1))) {
-            cout << "read index error " << endl;
-            in.close();
-            exit(0);
-        }
-
-        partBlackHole_neighbors_ =
-            new VertexID[partBlackHole_offsets_[scc_count_]];
-        if (!in.read(reinterpret_cast<char *>(partBlackHole_neighbors_),
-                     sizeof(VertexID) * partBlackHole_offsets_[scc_count_])) {
-            cout << "read index error " << endl;
-            in.close();
-            exit(0);
-        }
-
-        partBlackHoleConnect_offsets_ = new ul[scc_count_ + 1];
-        if (!in.read(reinterpret_cast<char *>(partBlackHoleConnect_offsets_),
-                     sizeof(ul) * (scc_count_ + 1))) {
-            cout << "read index error " << endl;
-            in.close();
-            exit(0);
-        }
-
-        partBlackHoleConnect_neighbors_ =
-            new VertexID[partBlackHoleConnect_offsets_[scc_count_]];
-        if (!in.read(reinterpret_cast<char *>(partBlackHoleConnect_neighbors_),
-                     sizeof(VertexID) *
-                         partBlackHoleConnect_offsets_[scc_count_])) {
-            cout << "read index error " << endl;
-            in.close();
-            exit(0);
-        }
-    }
-
-    size_t labels_vertices_size;
-    if (!in.read(reinterpret_cast<char *>(&labels_vertices_size),
-                 sizeof(labels_vertices_size))) {
-        cout << "read index error " << endl;
-        in.close();
-        exit(0);
-    }
-    labels_vertices_.clear();
-    for (size_t i = 0; i < labels_vertices_size; i++) {
-        LabelID label;
-        ui vertex_id;
-        if (!in.read(reinterpret_cast<char *>(&label), sizeof(label)) ||
-            !in.read(reinterpret_cast<char *>(&vertex_id), sizeof(vertex_id))) {
-            cout << "read index error " << endl;
-            in.close();
-            exit(0);
-        }
-        labels_vertices_[label] = vertex_id;
-    }
-    if (scc_count_ > 0) {
-        scc_offsets_ = new ul[scc_count_ + 1];
-        in.read(reinterpret_cast<char *>(scc_offsets_),
-                sizeof(ul) * (scc_count_ + 1));
-
-        scc_neighbors_ = new VertexID[scc_offsets_[scc_count_]];
-        in.read(reinterpret_cast<char *>(scc_neighbors_),
-                sizeof(VertexID) * scc_offsets_[scc_count_]);
-
-        scc_id_ = new ui[vertices_count_];
-        in.read(reinterpret_cast<char *>(scc_id_),
-                sizeof(ui) * vertices_count_);
-
-        scc_vertices_offsets_ = new ul[scc_count_ + 1];
-        in.read(reinterpret_cast<char *>(scc_vertices_offsets_),
-                sizeof(ul) * (scc_count_ + 1));
-
-        scc_vertices_ = new VertexID[scc_vertices_offsets_[scc_count_]];
-        in.read(reinterpret_cast<char *>(scc_vertices_),
-                sizeof(VertexID) * scc_vertices_offsets_[scc_count_]);
-
-        scc_rev_offsets_ = new ul[scc_count_ + 1];
-        in.read(reinterpret_cast<char *>(scc_rev_offsets_),
-                sizeof(ul) * (scc_count_ + 1));
-
-        scc_rev_neighbors_ = new VertexID[scc_rev_offsets_[scc_count_]];
-        in.read(reinterpret_cast<char *>(scc_rev_neighbors_),
-                sizeof(VertexID) * scc_rev_offsets_[scc_count_]);
-    }
-    in.close();
-
-    std::cout << "Index load over" << endl;
-    return 1;
 }

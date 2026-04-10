@@ -161,6 +161,8 @@ inline int checkRelation(vector<ui> &a, vector<ui> &b) {
     return 1;
 }
 
+
+
 class UnionFind {
   private:
     std::vector<int> parent;
@@ -198,5 +200,6 @@ class UnionFind {
         return count;
     }
 };
+
 
 #endif

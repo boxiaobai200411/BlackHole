@@ -2,7 +2,7 @@
 #define GRAPH_H
 
 #include "type.h"
-
+#include <bits/stdc++.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -14,34 +14,30 @@ class Graph {
     std::string dataid_;
     LabelID *labels_; // 标签数组 大小vertices_count_
 
-    ul *offsets_;         // 每个点邻居偏移量 大小vertices_count_+1
-    VertexID *neighbors_; // 邻居数组 大小neighbors_[vertices_count_]
+    // 原图
+    ul *reverse_offsets_;         // 反向边的偏移量  vertices_count_+1
+    VertexID *reverse_neighbors_; // 反向邻居 reverse_offsets_[vertices_count_]
+    ul *offsets_;                 // 每个点邻居偏移量 大小vertices_count_+1
+    VertexID *neighbors_;         // 邻居数组 大小neighbors_[vertices_count_]
 
-    ul *partBlackHole_offsets_; // 黑洞的偏移 大小ByPartBHVertices_count_+1
+    // scc图
+    ui scc_count_;                // 缩点后的点数
+    ui *scc_id_;                  // 每个原始点所属的SCC编号
+    ul *scc_offsets_;             // 缩点后邻居偏移量
+    VertexID *scc_neighbors_;     // 缩点后邻居
+    ul *scc_vertices_offsets_;    // 每个SCC包含的点的偏移量
+    VertexID *scc_vertices_;      // 每个SCC对应的原始点集合
+    ul *scc_rev_offsets_;         // 缩点后反向邻居偏移量
+    VertexID *scc_rev_neighbors_; // 缩点后反向邻居
+
+    // 最小黑洞
+    ul *partBlackHole_offsets_;  // 黑洞的偏移 大小ByPartBHVertices_count_+1
+    ui *partBlackHole_minIndeg_; // 第i个黑洞的minIndeg
     VertexID *
         partBlackHole_neighbors_; // 每个点的黑洞邻居 上方点连接下方
                                   // 大小partBlackHole_offsets_[ByPartBHVertices_count_]
-    ul *partBlackHoleConnect_offsets_;
+    ul *partBlackHoleConnect_offsets_;         // 最小黑洞之间的连接偏移
     VertexID *partBlackHoleConnect_neighbors_; // 最小黑洞之间的连接
-
-    ul *reverse_offsets_;         // 反向边的偏移量  vertices_count_+1
-    VertexID *reverse_neighbors_; // 反向邻居 reverse_offsets_[vertices_count_]
-
-    std::unordered_map<LabelID, ui>
-        labels_vertices_;       // 一共有大小vertices_count_个对
-    BloomFilter distinctAnswer; // 去重不用save和lord
-
-    ui scc_count_; // 缩点后的点数
-
-    ul *scc_offsets_;         // 缩点后邻居偏移量
-    VertexID *scc_neighbors_; // 缩点后邻居
-    ui *scc_id_;              // 每个原始点所属的SCC编号
-
-    ul *scc_vertices_offsets_; // 每个SCC包含的点的偏移量
-    VertexID *scc_vertices_;   // 每个SCC对应的原始点集合
-
-    ul *scc_rev_offsets_;         // 缩点后反向邻居偏移量
-    VertexID *scc_rev_neighbors_; // 缩点后反向邻居
 
   public:
     Graph() {
@@ -57,8 +53,6 @@ class Graph {
 
         partBlackHole_offsets_ = NULL;
         partBlackHole_neighbors_ = NULL;
-
-        labels_vertices_.clear();
     }
     ~Graph() {
         delete[] offsets_;
@@ -74,37 +68,43 @@ class Graph {
   public:
     void loadGraphFromFile(const std::string &file_path);
 
-    uint64_t queryKBlackHoleParallel(const ui k, const std::string answer_path);
-    uint64_t queryKBlackHole(const ui k, const std::string answer_path);
-    uint64_t baseline(const ui k, const std::string answer_path);
+    uint64_t queryKBlackHoleParallel(const ui k, double y, int eachin,
+                                     const std::string answer_path);
+    uint64_t queryKBlackHole(const ui k, double y, int eachin,
+                             const std::string answer_path);
+
     void searchAnswer(ui level, ui start, const ui k, ui answerCount,
                       VertexID *answer_, bool *visPoint, ui NeighborCount,
                       VertexID *NeighborSet, bool *VisNeighbor, ui upPointCount,
-                      VertexID *upPoint, std::ofstream &ofs,
-                      uint64_t &kSizeCount, BloomFilter &localDistinct);
+                      VertexID *upPoint, double y, int eachin,
+                      std::ofstream &ofs, uint64_t &kSizeCount,
+                      BloomFilter &localDistinct);
 
-    void saveIndex(std::string dataid);
-    bool loadIndex(std::string dataid);
-    double getTotalMemoryMB();
+    uint64_t baseline(const ui k, double y, int eachin,
+                      const std::string answer_path);
+    void baselineDfs(ui level,const ui k, double y, int eachin, int root,
+                     VertexID *NeighborSet, ui neighborCount, int *visPoint,int *visAnswer,VertexID *answer_,
+                     ui answerCount,uint64_t &kSizeCount, std::string answer_path);
+
+    uint64_t baseline2(const ui k, string answer_path);
+    void baselineDfs2(ui level, ui *answer, ui answerCount, ul &KsizeCount,
+                        ui k, ui *ind, ui *selectset, ui setSize,
+                        BloomFilter &globalDistinct);
+
+
+    void saveIndex(std::string dataid, int max);
+    bool loadIndex(std::string dataid, int max);
 
     void buildIndex(int maxset);
     void buildSCCGraph();
-    void getTheMinBlackHole();
     void getTheMinBlackHoleBFS(int maxset);
     void connectSCC(int maxset);
-    bool isSCCGraphWeaklyConnected();
-
-    void getVerticePartBlackHole(const VertexID id,
-                                 std::vector<VertexID> &PartBlackHole);
-    void getVerticesPartBlackHole();
-    void baselineDfs(ui level, ui *answer, ui answerCount, ul &KsizeCount, ui k,
-                     ui *ind, ui *selectset, ui setSize,
-                     BloomFilter &globalDistinct);
 
   public:
     void setThreads_count_(ui count) { threads_count_ = count; }
     const ui getVerticesCount() const { return vertices_count_; }
     const ui getEdgesCount() const { return edges_count_; }
+
     const ul getVertexOutDegree(const VertexID id) const {
         return offsets_[id + 1] - offsets_[id];
     }
@@ -141,11 +141,6 @@ class Graph {
         return partBlackHole_neighbors_ + partBlackHole_offsets_[id]; // 上连下
     } // 每个最小黑洞的点
 
-    const ui getLabelsVertices(const LabelID label) const {
-        return labels_vertices_.find(label) == labels_vertices_.end()
-                   ? -1
-                   : labels_vertices_.at(label);
-    }
     const LabelID getVertexLabel(const VertexID id) const {
         return labels_[id];
     }

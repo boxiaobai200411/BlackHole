@@ -1,7 +1,7 @@
 ## Black Holes on Graphs
 
 This repository provides the implementation of algorithms for **black hole detection queries on directed graphs**.
- It includes our proposed methods (`DetectBH` and `DetectBH-P`) as well as a baseline approach (`BaseLine`) for comparison.
+ It includes our proposed methods (`DetectBH` and `DetectBH-P`) as well as two approach (`KHopEnum` and `ExpandEnum`) for comparison.
 
 ## Code Structure
 
@@ -37,7 +37,7 @@ After running the codes, there will be executable files called `main` in `./src`
 **Perform a query for black holes of size k :**
 
 ```
-./main -d Wiki-Vote -l 2 -r 10 -m 100
+./main -d Wiki-Vote -l 3 -r 3 -e 1 -y 10
 ```
 
 ### Command Line Options
@@ -47,5 +47,9 @@ After running the codes, there will be executable files called `main` in `./src`
 | `-d`   | Yes      | Dataset name (e.g., `Wiki-Vote`)                             |
 | `-l`   | Yes      | Query the left interval of black holes of size k             |
 | `-r`   | Yes      | Query the right interval of black holes of size k            |
-| `-m`   | No       | The index retains the largest minimum black hole size (greater than or equal to r) |
+| `-e`   | Yes      | The parameter $\epsilon$ used to search for gravitational black holes |
+| `-y`   | Yes      | The parameter $\delta$ used to search for gravitational black holes |
+| `-t`   | No       | Dataset transformation strategy                              |
+
+
 
